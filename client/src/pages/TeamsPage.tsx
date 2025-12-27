@@ -1,0 +1,183 @@
+import React, { useState, useEffect } from 'react';
+import { MaintenanceTeam } from '../types';
+import { teamService } from '../services/teamService';
+import Badge from '../components/Badge';
+import Button from '../components/Button';
+import { Plus, Users } from 'lucide-react';
+import TeamModal from '../components/TeamModal';
+import MemberModal from '../components/MemberModal';
+import AssignmentsPanel from '../components/AssignmentsPanel';
+
+const TeamsPage: React.FC = () => {
+  const [teams, setTeams] = useState<MaintenanceTeam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+
+  const loadTeams = async () => {
+    try {
+      const data = await teamService.getAllTeams();
+      setTeams(data);
+    } catch (error) {
+      console.error('Failed to load teams:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleMemberStatus = async (memberId: string, currentStatus: boolean) => {
+    setUpdatingMemberId(memberId);
+    try {
+      await teamService.updateMember(memberId, { isActive: !currentStatus });
+      await loadTeams();
+    } catch (error) {
+      console.error('Failed to update member status:', error);
+      alert('Failed to update member status');
+    } finally {
+      setUpdatingMemberId(null);
+    }
+  };
+
+  useEffect(() => {
+    loadTeams();
+  }, []);
+
+  if (loading) {
+    return <div className="text-center py-8">Loading teams...</div>;
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Maintenance Teams</h2>
+          <p className="text-gray-600 mt-1">Manage teams, members, and assignments</p>
+        </div>
+        <Button onClick={() => setIsTeamModalOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Team
+        </Button>
+      </div>
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Teams List - 2 columns */}
+        <div className="lg:col-span-2">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">All Teams</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {teams.map((team) => (
+          <div key={team.id} className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-900">{team.name}</h3>
+                {team.specialization && (
+                  <p className="text-sm text-gray-600 mt-1">{team.specialization}</p>
+                )}
+              </div>
+              <Badge variant={team.isActive ? 'success' : 'default'}>
+                {team.isActive ? 'Active' : 'Inactive'}
+              </Badge>
+            </div>
+
+            {team.description && (
+              <p className="text-sm text-gray-600 mb-4">{team.description}</p>
+            )}
+
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center text-sm font-medium text-gray-700">
+                  <Users className="h-4 w-4 mr-2" />
+                  Team Members ({team.members?.length || 0})
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedTeamId(team.id);
+                    setIsMemberModalOpen(true);
+                  }}
+                  className="text-sm text-primary-600 hover:text-primary-700"
+                >
+                  Add Member
+                </button>
+              </div>
+
+              {team.members && team.members.length > 0 ? (
+                <div className="space-y-2">
+                  {team.members.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"
+                    >
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{member.name}</p>
+                        {member.role && (
+                          <p className="text-xs text-gray-500">{member.role}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => toggleMemberStatus(member.id, member.isActive)}
+                        disabled={updatingMemberId === member.id}
+                        className={`px-3 py-1 text-xs font-medium rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          member.isActive
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {updatingMemberId === member.id ? '...' : member.isActive ? 'Active' : 'Inactive'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No members yet</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      </div>
+
+        {/* Assignments Panel - 1 column */}
+        <div className="lg:col-span-1">
+          <AssignmentsPanel />
+        </div>
+      </div>
+
+      {teams.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-lg shadow">
+          <p className="text-gray-500">No teams found. Create your first team to get started.</p>
+        </div>
+      )}
+
+      {isTeamModalOpen && (
+        <TeamModal
+          isOpen={isTeamModalOpen}
+          onClose={() => setIsTeamModalOpen(false)}
+          onSuccess={() => {
+            setIsTeamModalOpen(false);
+            loadTeams();
+          }}
+        />
+      )}
+
+      {isMemberModalOpen && (
+        <MemberModal
+          isOpen={isMemberModalOpen}
+          onClose={() => {
+            setIsMemberModalOpen(false);
+            setSelectedTeamId(null);
+          }}
+          onSuccess={() => {
+            setIsMemberModalOpen(false);
+            setSelectedTeamId(null);
+            loadTeams();
+          }}
+          defaultTeamId={selectedTeamId || undefined}
+        />
+      )}
+    </div>
+  );
+};
+
+export default TeamsPage;
